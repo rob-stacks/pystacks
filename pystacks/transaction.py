@@ -332,8 +332,14 @@ class Transaction:
         write_vector_class_to_stream(stream, self.post_conditions)
         self.payload.to_stream(stream)
 
-    def to_hex(self):
+    def to_bytes(self):
         stream = BytesIO()
         self.to_stream(stream)
         stream.seek(0)
-        return stream.read().hex()
+        return stream.read()
+
+    def to_hex(self):
+        return self.to_bytes().hex()
+
+    def txid(self):
+        return hashlib.new("sha512_256", self.to_bytes()).digest()
