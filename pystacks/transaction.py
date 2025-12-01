@@ -1,7 +1,6 @@
-import struct
 import hashlib
-from coincurve import PublicKey
 from io import BytesIO
+import struct
 from .utils import (
     read_vector_class_from_stream,
     read_string_from_stream,
@@ -19,7 +18,14 @@ from .utils import (
     recover_pubkey_from_signature,
     ByteType,
     verify,
+    hash160,
+    compressed_pubkey,
+    sha512_256,
+    sign,
+    get_public_key,
 )
+
+from typing import Union
 
 
 class HashMode(ByteType):
@@ -74,9 +80,9 @@ class ClarityVersion(ByteType):
 
 
 class TransactionSmartContract:
-    def __init__(self):
-        self.name = None
-        self.code_body = None
+    def __init__(self, name=None, code_body=None):
+        self.name = name
+        self.code_body = code_body
 
     @staticmethod
     def from_stream(stream):
@@ -249,6 +255,45 @@ class TransactionSpendingCondition:
             self.key_encoding.to_stream(stream)
             stream.write(self.signature)
 
+        def get_hash(self, tx):
+            tx_copy = tx.copy()
+            tx_copy.auth.origin.tx_fee = 0
+            tx_copy.auth.origin.nonce = 0
+            tx_copy.auth.origin.signature = bytes(65)
+            tx_copy_txid = tx_copy.txid()
+
+            return sha512_256(
+                tx_copy_txid
+                + b"\x04"
+                + struct.pack(">QQ", tx.auth.origin.tx_fee, tx.auth.origin.nonce)
+            )
+
+        def sign(self, tx, private_key):
+            # ensure teh signature is empty before doing any operation
+            self.signature = bytes(65)
+            # TODO honour self.hash_mode
+            if isinstance(self.key_encoding, TransactionPublicKeyEncoding.Uncompressed):
+                self.signer = hash160(get_public_key(private_key))
+            else:
+                self.signer = hash160(get_public_key(private_key, True))
+
+            self.signature = sign(private_key, self.get_hash(tx))
+
+        def verify(self, tx):
+            hash = self.get_hash(tx)
+            pubkey = recover_pubkey_from_signature(self.signature, hash)
+
+            # TODO honour self.hash_mode
+            if isinstance(self.key_encoding, TransactionPublicKeyEncoding.Uncompressed):
+                pubkey_hash = hash160(pubkey)
+            else:
+                pubkey_hash = hash160(compressed_pubkey(pubkey))
+
+            return (
+                verify(pubkey, self.signature, hash)
+                and hash160(pubkey_hash) == self.signer
+            )
+
     class Multisig:
         pass
 
@@ -266,7 +311,11 @@ class TransactionSpendingCondition:
 class TransactionAuth:
     class Standard:
         def __init__(self):
-            self.origin = None
+            self.origin: Union[
+                TransactionSpendingCondition.Singlesig,
+                TransactionSpendingCondition.Multisig,
+                TransactionSpendingCondition.OrderIndependentMultisig,
+            ] = None
 
         @staticmethod
         def from_stream(stream):
@@ -278,10 +327,11 @@ class TransactionAuth:
             write_u8_to_stream(stream, 0x04)
             self.origin.to_stream(stream)
 
-        def clear(self):
-            self.origin.tx_fee = 0
-            self.origin.nonce = 0
-            self.origin.signature = bytes(65)
+        def sign(self, tx, private_key):
+            self.origin.sign(tx, private_key)
+
+        def verify(self, tx):
+            return self.origin.verify(tx)
 
     class Sponsored:
         pass
@@ -301,7 +351,7 @@ class Transaction:
     def __init__(self):
         self.version = None
         self.chain_id = None
-        self.auth = None
+        self.auth: Union[TransactionAuth.Standard, TransactionAuth.Sponsored] = None
         self.anchor_mode = None
         self.post_condition_mode = None
         self.post_conditions = None
@@ -349,7 +399,7 @@ class Transaction:
         return self.to_bytes().hex()
 
     def txid(self):
-        return hashlib.new("sha512_256", self.to_bytes()).digest()
+        return sha512_256(self.to_bytes())
 
     def copy(self):
         stream = BytesIO()
@@ -358,9 +408,7 @@ class Transaction:
         return Transaction.from_stream(stream)
 
     def verify(self):
-        tx_copy = self.copy()
-        tx_copy.auth.clear()
-        tx_copy_txid = tx_copy.txid()
-        pubkey = recover_pubkey_from_signature(self.auth.origin.signature, tx_copy_txid)
-        print("signature", len(self.auth.origin.signature), self.auth.origin.signature)
-        return verify(pubkey, self.auth.origin.signature, tx_copy_txid)
+        return self.auth.verify(self)
+
+    def sign(self, private_key):
+        self.auth.sign(self, private_key)

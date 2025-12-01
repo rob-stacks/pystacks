@@ -1,26 +1,46 @@
-from coincurve import PublicKey
+from coincurve import PublicKey, PrivateKey
 from coincurve.ecdsa import deserialize_recoverable, recoverable_convert, cdata_to_der
 from coincurve.utils import verify_signature
 import struct
+import hashlib
 
 
-def recover_pubkey_from_signature(signature, message):
+def generate_key(compressed=False):
+    pk = PrivateKey()
+    return pk.secret, pk.public_key.format(compressed=compressed)
+
+
+def compressed_pubkey(pubkey):
+    return PublicKey(pubkey).format(compressed=True)
+
+
+def recover_pubkey_from_signature(signature, message, compressed=False):
     r_s = signature[1:]
-    v = signature[0:1]
+    v = signature[:1]
     pub = PublicKey.from_signature_and_message(r_s + v, message, hasher=None)
-    return pub.format(compressed=False)[1:]
+    return pub.format(compressed=compressed)
+
+
+def get_public_key(privkey, compressed=False):
+    return PrivateKey(privkey).public_key.format(compressed=compressed)
 
 
 def verify(pubkey, signature, message):
     signature_der = cdata_to_der(
-        recoverable_convert(deserialize_recoverable(signature[1:] + signature[0:1]))
+        recoverable_convert(deserialize_recoverable(signature[1:] + signature[:1]))
     )
     return verify_signature(
         signature_der,
         message,
-        b"\x04" + pubkey,
+        pubkey,
         hasher=None,
     )
+
+
+def sign(privkey, message):
+    pk = PrivateKey(privkey)
+    signature = pk.sign_recoverable(message, hasher=None)
+    return signature[64:] + signature[:64]
 
 
 def read_vector_class_from_stream(stream, _class):
@@ -92,6 +112,21 @@ def serialize(value):
         return cls
 
     return wrapper
+
+
+def sha256(data):
+    return hashlib.new("sha256", data).digest()
+
+
+def hash160(data):
+    return hashlib.new("ripemd160", sha256(data)).digest()
+
+
+def sha512_256(data):
+    return hashlib.new(
+        "sha512_256",
+        data,
+    ).digest()
 
 
 class ByteType:
