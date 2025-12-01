@@ -16,7 +16,9 @@ from .utils import (
     write_string_to_stream,
     write_vector_u8_to_stream,
     serialize,
+    recover_pubkey_from_signature,
     ByteType,
+    verify,
 )
 
 
@@ -276,6 +278,11 @@ class TransactionAuth:
             write_u8_to_stream(stream, 0x04)
             self.origin.to_stream(stream)
 
+        def clear(self):
+            self.origin.tx_fee = 0
+            self.origin.nonce = 0
+            self.origin.signature = bytes(65)
+
     class Sponsored:
         pass
 
@@ -343,3 +350,17 @@ class Transaction:
 
     def txid(self):
         return hashlib.new("sha512_256", self.to_bytes()).digest()
+
+    def copy(self):
+        stream = BytesIO()
+        self.to_stream(stream)
+        stream.seek(0)
+        return Transaction.from_stream(stream)
+
+    def verify(self):
+        tx_copy = self.copy()
+        tx_copy.auth.clear()
+        tx_copy_txid = tx_copy.txid()
+        pubkey = recover_pubkey_from_signature(self.auth.origin.signature, tx_copy_txid)
+        print("signature", len(self.auth.origin.signature), self.auth.origin.signature)
+        return verify(pubkey, self.auth.origin.signature, tx_copy_txid)

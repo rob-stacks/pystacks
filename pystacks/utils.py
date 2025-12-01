@@ -1,4 +1,6 @@
 from coincurve import PublicKey
+from coincurve.ecdsa import deserialize_recoverable, recoverable_convert, cdata_to_der
+from coincurve.utils import verify_signature
 import struct
 
 
@@ -7,6 +9,18 @@ def recover_pubkey_from_signature(signature, message):
     v = signature[0:1]
     pub = PublicKey.from_signature_and_message(r_s + v, message, hasher=None)
     return pub.format(compressed=False)[1:]
+
+
+def verify(pubkey, signature, message):
+    signature_der = cdata_to_der(
+        recoverable_convert(deserialize_recoverable(signature[1:] + signature[0:1]))
+    )
+    return verify_signature(
+        signature_der,
+        message,
+        b"\x04" + pubkey,
+        hasher=None,
+    )
 
 
 def read_vector_class_from_stream(stream, _class):
