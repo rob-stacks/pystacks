@@ -52,6 +52,8 @@ def read_vector_class_from_stream(stream, _class):
 
 
 def write_vector_class_to_stream(stream, items):
+    if items is None:
+        items = []
     write_u32_to_stream(stream, len(items))
     for item in items:
         item.to_stream(stream)

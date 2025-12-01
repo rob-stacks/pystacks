@@ -118,9 +118,9 @@ class TransactionPayload:
         pass
 
     class VersionedSmartContract:
-        def __init__(self):
-            self.version = None
-            self.smart_contract = None
+        def __init__(self, version=None, smart_contract=None):
+            self.version = version
+            self.smart_contract = smart_contract
 
         @staticmethod
         def from_stream(stream):
