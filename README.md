@@ -17,7 +17,7 @@ from pystacks.transaction import (
 )
 
 from pystacks.utils import generate_key
-from pystacks.api import simulate
+from pystacks.api import block_simulate
 from pprint import pprint
 
 private_key, public_key = generate_key()
@@ -44,7 +44,7 @@ tx.payload = TransactionPayload.VersionedSmartContract(
 tx.sign(private_key)
 
 pprint(
-    simulate(
+    block_simulate(
         "ffc3e13aa7102289a48db62da6558709d9b8c1452d6d4fc7fe4f3ce53a7e6cc5",
         "hello",
         [tx.to_hex()],
