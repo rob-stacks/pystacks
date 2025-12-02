@@ -23,7 +23,10 @@ from .utils import (
     sha512_256,
     sign,
     get_public_key,
+    C32_ADDRESS_VERSION_MAINNET_SINGLESIG,
+    C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
 )
+from .clarity import Value, TypePrefix
 
 from typing import Union
 
@@ -96,12 +99,144 @@ class TransactionSmartContract:
         write_vector_u8_to_stream(stream, self.code_body)
 
 
-class TransactionPayload:
-    class TokenTransfer:
+class TenureChangeCause(ByteType):
+
+    @serialize(0)
+    class BlockFound:
         pass
 
-    class ContractCall:
+    @serialize(1)
+    class Extended:
         pass
+
+    @serialize(2)
+    class ExtendedRuntime:
+        pass
+
+    @serialize(3)
+    class ExtendedReadCount:
+        pass
+
+    @serialize(4)
+    class ExtendedReadLength:
+        pass
+
+    @serialize(5)
+    class ExtendedWriteCount:
+        pass
+
+    @serialize(6)
+    class ExtendedWriteLength:
+        pass
+
+
+class PrincipalData:
+
+    class Standard:
+        def __init__(self):
+            self.version = None
+            self.data = None
+
+        @staticmethod
+        def from_stream(stream):
+            standard = PrincipalData.Standard()
+            standard.version = read_u8_from_stream(stream)
+            standard.data = stream.read(20)
+            return standard
+
+    class Contract:
+        def __init__(self):
+            self.issuer = None
+            self.name = None
+
+        @staticmethod
+        def from_stream(stream):
+            contract = PrincipalData.Contract()
+            contract.issuer = PrincipalData.Standard.from_stream(stream)
+            contract.name = read_string_from_stream(stream)
+
+    @staticmethod
+    def from_stream(stream):
+        principal_data_type = TypePrefix.from_stream(stream)
+        if isinstance(principal_data_type, TypePrefix.PrincipalStandard):
+            return PrincipalData.Standard.from_stream(stream)
+        elif isinstance(principal_data_type, TypePrefix.PrincipalContract):
+            return PrincipalData.Contract.from_stream(stream)
+        raise Exception("Unsupported PrincipalData")
+
+
+class TransactionVersion(ByteType):
+
+    @serialize(C32_ADDRESS_VERSION_MAINNET_SINGLESIG)
+    class Mainnet:
+        pass
+
+    @serialize(C32_ADDRESS_VERSION_TESTNET_SINGLESIG)
+    class Testnet:
+        pass
+
+
+class StacksAddress:
+
+    def __init__(self, version=None, _bytes=None):
+        self.version = version
+        self._bytes = _bytes
+
+    @staticmethod
+    def from_stream(stream):
+        stacks_address = StacksAddress()
+        stacks_address.version = TransactionVersion.from_stream(stream)
+        stacks_address._bytes = stream.read(20)
+        return stacks_address
+
+    def to_stream(self, stream):
+        self.version.to_stream(stream)
+        stream.write(self._bytes)
+
+
+class TransactionPayload:
+    class TokenTransfer:
+        def __init__(self):
+            self.principal_data = None
+            self.amount = None
+            self.memo = None
+
+        @staticmethod
+        def from_stream(stream):
+            token_transfer = TransactionPayload.TokenTransfer()
+            token_transfer.principal_data = PrincipalData.from_stream(stream)
+            token_transfer.amount = read_u64_from_stream(stream)
+            token_transfer.memo = stream.read(34)
+            return token_transfer
+
+    class ContractCall:
+        def __init__(
+            self,
+            address=None,
+            contract_name=None,
+            function_name=None,
+            function_args=None,
+        ):
+            self.address = address
+            self.contract_name = contract_name
+            self.function_name = function_name
+            self.function_args = function_args
+
+        @staticmethod
+        def from_stream(stream):
+            contract_call = TransactionPayload.ContractCall()
+            contract_call.address = StacksAddress.from_stream(stream)
+            contract_call.contract_name = read_string_from_stream(stream)
+            contract_call.function_name = read_string_from_stream(stream)
+            contract_call.function_args = read_vector_class_from_stream(stream, Value)
+            return contract_call
+
+        def to_stream(self, stream):
+            write_u8_to_stream(stream, 0x02)
+            self.address.to_stream(stream)
+            write_string_to_stream(stream, self.contract_name)
+            write_string_to_stream(stream, self.function_name)
+            write_vector_class_to_stream(stream, self.function_args)
 
     class SmartContract:
         @staticmethod
@@ -112,7 +247,14 @@ class TransactionPayload:
         pass
 
     class Coinbase:
-        pass
+        def __init__(self):
+            self.coinbase_payload = None
+
+        @staticmethod
+        def from_stream(stream):
+            coinbase = TransactionPayload.NakamotoCoinbase()
+            coinbase.coinbase_payload = stream.read(32)
+            return coinbase
 
     class CoinbaseToAltRecipient:
         pass
@@ -138,10 +280,40 @@ class TransactionPayload:
             self.smart_contract.to_stream(stream)
 
     class TenureChange:
-        pass
+        def __init__(self):
+            self.tenure_consensus_hash = None
+            self.prev_tenure_consensus_hash = None
+            self.burn_view_consensus_hash = None
+            self.previous_tenure_end = None
+            self.previous_tenure_blocks = None
+            self.cause = None
+            self.pubkey_hash = None
+
+        @staticmethod
+        def from_stream(stream):
+            tenure_change = TransactionPayload.TenureChange()
+            tenure_change.tenure_consensus_hash = stream.read(20)
+            tenure_change.prev_tenure_consensus_hash = stream.read(20)
+            tenure_change.burn_view_consensus_hash = stream.read(20)
+            tenure_change.previous_tenure_end = stream.read(32)
+            tenure_change.previous_tenure_blocks = read_u32_from_stream(stream)
+            tenure_change.cause = TenureChangeCause.from_stream(stream)
+            tenure_change.pubkey_hash = stream.read(20)
+            return tenure_change
 
     class NakamotoCoinbase:
-        pass
+        def __init__(self):
+            self.coinbase_payload = None
+            self.recipient = None
+            self.vrf_proof = None
+
+        @staticmethod
+        def from_stream(stream):
+            nakamoto_coinbase = TransactionPayload.NakamotoCoinbase()
+            nakamoto_coinbase.coinbase_payload = stream.read(32)
+            nakamoto_coinbase.recipient = Value.Optional.from_stream(stream)
+            nakamoto_coinbase.vrf_proof = stream.read(80)
+            return nakamoto_coinbase
 
     @staticmethod
     def from_stream(stream):
@@ -164,7 +336,7 @@ class TransactionPayload:
             return TransactionPayload.TenureChange.from_stream(stream)
         elif payload_id == 0x08:
             return TransactionPayload.NakamotoCoinbase.from_stream(stream)
-        raise Exception("Unsupported TransactionPayload")
+        raise Exception("Unsupported TransactionPayload 0x{:02x}".format(payload_id))
 
 
 class TransactionPostCondition:

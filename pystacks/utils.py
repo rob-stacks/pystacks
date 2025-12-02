@@ -3,6 +3,50 @@ from coincurve.ecdsa import deserialize_recoverable, recoverable_convert, cdata_
 from coincurve.utils import verify_signature
 import struct
 import hashlib
+import math
+
+C32_CHARACTERS = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+C32_ADDRESS_VERSION_MAINNET_SINGLESIG = 22
+C32_ADDRESS_VERSION_TESTNET_SINGLESIG = 26
+
+
+def c32_encode(input_bytes):
+    result = b""
+    carry = 0
+    carry_bits = 0
+
+    for current_value in reversed(input_bytes):
+        low_bits_to_take = 5 - carry_bits
+        low_bits = current_value & ((1 << low_bits_to_take) - 1)
+        c32_value = (low_bits << carry_bits) + carry
+        result += bytes((C32_CHARACTERS[c32_value],))
+        carry_bits = (8 + carry_bits) - 5
+        carry = current_value >> (8 - carry_bits)
+
+        if carry_bits >= 5:
+            c32_value = carry & ((1 << 5) - 1)
+            result += bytes((C32_CHARACTERS[c32_value],))
+            carry_bits -= 5
+            carry >>= 5
+
+    if carry_bits > 0:
+        result += bytes((C32_CHARACTERS[carry],))
+
+    # remove leading zeros from c32 encoding
+    result = result.rstrip(b"0")
+
+    # add leading zeros from input.
+    for current_value in input_bytes:
+        if current_value == 0:
+            result += b"0"
+
+    return bytes(reversed(result))
+
+
+def c32_address(version, data):
+    checksum = sha256(sha256(bytes((version,)) + data))[:4]
+    final_data = c32_encode(data + checksum)
+    return (b"S" + bytes((C32_CHARACTERS[version],)) + final_data).decode("utf8")
 
 
 def generate_key(compressed=False):
@@ -72,6 +116,10 @@ def read_vector_u8_from_stream(stream):
 
 def read_u8_from_stream(stream):
     return stream.read(1)[0]
+
+
+def read_u16_from_stream(stream):
+    return struct.unpack(">H", stream.read(2))[0]
 
 
 def read_u32_from_stream(stream):

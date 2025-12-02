@@ -1,10 +1,18 @@
 import struct
 import hashlib
 from coincurve import PublicKey
+from .utils import (
+    sha512_256,
+    read_u8_from_stream,
+    read_u64_from_stream,
+    read_u32_from_stream,
+    read_u16_from_stream,
+    read_vector_class_from_stream,
+)
+from .transaction import Transaction
 
 
-class NakamotoBlock:
-
+class NakamotoBlockHeader:
     def __init__(self):
         self.version = None
         self.height = None
@@ -15,46 +23,41 @@ class NakamotoBlock:
         self.state_index_root = None
         self.timestamp = None
         self.miner_signature = None
-        self.signer_signature = []
+        self.signer_signature = None
         self.pox_treatment_bit_vec_size = None
         self.pox_treatment = None
 
     @staticmethod
-    def from_blob(blob):
+    def from_stream(stream):
+        header = NakamotoBlockHeader()
+        header.version = read_u8_from_stream(stream)
+        header.height = read_u64_from_stream(stream)
+        header.burn_spent = read_u64_from_stream(stream)
+        header.consensus_hash = stream.read(20)
+        header.parent_block_id = stream.read(32)
+        header.tx_merkle_root = stream.read(32)
+        header.state_index_root = stream.read(32)
+        header.timestamp = read_u64_from_stream(stream)
+        header.miner_signature = stream.read(65)
+        header.signer_signature = []
+        for _ in range(0, read_u32_from_stream(stream)):
+            header.signer_signature.append(stream.read(65))
+        header.pox_treatment_bit_vec_size = read_u16_from_stream(stream)
+        header.pox_treatment = stream.read(read_u32_from_stream(stream))
+        return header
+
+
+class NakamotoBlock:
+
+    def __init__(self, header=None, transactions=None):
+        self.header = header
+        self.transactions = transactions
+
+    @staticmethod
+    def from_stream(stream):
         block = NakamotoBlock()
-        offset = 0
-        block.version, block.height, block.burn_spent = struct.unpack(
-            ">BQQ", blob[offset : offset + 1 + 8 + 8]
-        )
-        offset += 1 + 8 + 8
-        block.consensus_hash = blob[offset : offset + 20]
-        offset += 20
-        block.parent_block_id = blob[offset : offset + 32]
-        offset += 32
-        block.tx_merkle_root = blob[offset : offset + 32]
-        offset += 32
-        block.state_index_root = blob[offset : offset + 32]
-        offset += 32
-        block.timestamp = struct.unpack(">Q", blob[offset : offset + 8])[0]
-        offset += 8
-        block.miner_signature = blob[offset : offset + 65]
-        offset += 65
-        number_of_signer_signature = struct.unpack(">I", blob[offset : offset + 4])[0]
-        offset += 4
-        for _ in range(0, number_of_signer_signature):
-            block.signer_signature.append(blob[offset : offset + 65])
-            offset += 65
-        block.pox_treatment_bit_vec_size = struct.unpack(
-            ">H", blob[offset : offset + 2]
-        )[0]
-        offset += 2
-        pox_treatment_bit_vec_size_in_bytes = struct.unpack(
-            ">I", blob[offset : offset + 4]
-        )[0]
-        offset += 4
-        block.pox_treatment = blob[
-            offset : offset + pox_treatment_bit_vec_size_in_bytes
-        ]
+        block.header = NakamotoBlockHeader.from_stream(stream)
+        block.transactions = read_vector_class_from_stream(stream, Transaction)
         return block
 
     def block_hash(self):
@@ -71,9 +74,7 @@ class NakamotoBlock:
             )
             + self.pox_treatment
         )
-        return hashlib.new("sha512_256", data).digest()
+        return sha512_256(data)
 
     def block_id(self):
-        return hashlib.new(
-            "sha512_256", self.block_hash() + self.consensus_hash
-        ).digest()
+        return sha512_256(self.block_hash() + self.header.consensus_hash)
