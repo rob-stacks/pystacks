@@ -66,3 +66,47 @@ def block_v3(
             return NakamotoBlock.from_stream(BytesIO(data))
     except urllib.error.HTTPError as e:
         raise Exception("HTTP {}: {}".format(e.code, e.read().decode("utf8"))) from None
+
+
+def call_read_only(
+    sender,
+    contract_address,
+    contract_name,
+    function_name,
+    function_args=None,
+    base_url="http://localhost:20443",
+    endpoint="/v2/contracts/call-read/",
+):
+    url = (
+        base_url
+        + endpoint
+        + contract_address
+        + "/"
+        + contract_name
+        + "/"
+        + function_name
+    )
+
+    serialized_args = []
+    if function_args:
+        for function_arg in function_args:
+            stream = BytesIO()
+            function_arg.to_stream(stream)
+            stream.seek(0)
+            serialized_args.append(stream.read().hex())
+
+    json_blob = json.dumps({"sender": sender, "arguments": serialized_args})
+
+    headers = {
+        "Content-Type": "application/json",
+    }
+
+    req = urllib.request.Request(
+        url, data=json_blob.encode("utf-8"), headers=headers, method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as e:
+        raise Exception("HTTP {}: {}".format(e.code, e.read().decode("utf8"))) from None

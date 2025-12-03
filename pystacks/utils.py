@@ -39,6 +39,8 @@ def c32_encode(input_bytes):
     for current_value in input_bytes:
         if current_value == 0:
             result += b"0"
+        else:
+            break
 
     return bytes(reversed(result))
 
@@ -109,6 +111,12 @@ def read_string_from_stream(stream):
     return data.decode("utf8")
 
 
+def read_ascii_string_from_stream(stream):
+    string_len = read_u8_from_stream(stream)
+    data = stream.read(string_len)
+    return data.decode("ascii")
+
+
 def read_vector_u8_from_stream(stream):
     vector_len = read_u32_from_stream(stream)
     return stream.read(vector_len)
@@ -130,6 +138,11 @@ def read_u64_from_stream(stream):
     return struct.unpack(">Q", stream.read(8))[0]
 
 
+def read_u128_from_stream(stream):
+    high, low = struct.unpack(">QQ", stream.read(8 * 2))
+    return high << 64 | low
+
+
 def write_u8_to_stream(stream, value):
     stream.write(struct.pack("B", value))
 
@@ -140,6 +153,12 @@ def write_u32_to_stream(stream, value):
 
 def write_u64_to_stream(stream, value):
     stream.write(struct.pack(">Q", value))
+
+
+def write_u128_to_stream(stream, value):
+    high = value >> 64
+    low = value & 0xFFFFFFFFFFFFFFFF
+    stream.write(struct.pack(">QQ", high, low))
 
 
 def write_vector_u8_to_stream(stream, data):
