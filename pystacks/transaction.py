@@ -6,9 +6,11 @@ from .utils import (
     read_string_from_stream,
     read_vector_u8_from_stream,
     read_u8_from_stream,
+    read_u16_from_stream,
     read_u32_from_stream,
     read_u64_from_stream,
     write_u8_to_stream,
+    write_u16_to_stream,
     write_u32_to_stream,
     write_u64_to_stream,
     write_vector_class_to_stream,
@@ -395,6 +397,14 @@ class TransactionPublicKeyEncoding(ByteType):
         pass
 
 
+class TransactionAuthField:
+    class PublicKey:
+        pass
+
+    class Signature:
+        pass
+
+
 class TransactionSpendingCondition:
     class Singlesig:
         def __init__(self):
@@ -434,6 +444,8 @@ class TransactionSpendingCondition:
             tx_copy.auth.origin.signature = bytes(65)
             tx_copy_txid = tx_copy.txid()
 
+            # TODO manage 0x04 here
+
             return sha512_256(
                 tx_copy_txid
                 + b"\x04"
@@ -467,7 +479,75 @@ class TransactionSpendingCondition:
             )
 
     class Multisig:
-        pass
+        def __init__(self):
+            self.hash_mode = None
+            self.signer = None
+            self.nonce = None
+            self.tx_fee = None
+            self.fields = None
+            self.signatures_required = None
+
+        @staticmethod
+        def from_stream(stream):
+            condition_multisig = TransactionSpendingCondition.Multisig()
+            condition_multisig.hash_mode = HashMode.from_stream(stream)
+            condition_multisig.signer = stream.read(20)
+            condition_multisig.nonce = read_u64_from_stream(stream)
+            condition_multisig.tx_fee = read_u64_from_stream(stream)
+            condition_multisig.fields = read_vector_class_from_stream(
+                stream, TransactionAuthField
+            )
+            condition_multisig.signatures_required = read_u16_from_stream(stream)
+
+            return condition_multisig
+
+        def to_stream(self, stream):
+            self.hash_mode.to_stream(stream)
+            stream.write(self.signer)
+            write_u64_to_stream(stream, self.nonce)
+            write_u64_to_stream(stream, self.tx_fee)
+            write_vector_class_to_stream(stream, self.fields)
+            write_u16_to_stream(stream, self.signatures_required)
+
+        def get_hash(self, tx):
+            tx_copy = tx.copy()
+            tx_copy.auth.origin.tx_fee = 0
+            tx_copy.auth.origin.nonce = 0
+            tx_copy.auth.origin.fields = []
+            tx_copy_txid = tx_copy.txid()
+
+            # TODO manage 0x04 here
+            return sha512_256(
+                tx_copy_txid
+                + b"\x04"
+                + struct.pack(">QQ", tx.auth.origin.tx_fee, tx.auth.origin.nonce)
+            )
+
+        def sign(self, tx, private_key):
+            # ensure the signature is empty before doing any operation
+            self.signature = bytes(65)
+            # TODO honour self.hash_mode
+            if isinstance(self.key_encoding, TransactionPublicKeyEncoding.Uncompressed):
+                self.signer = hash160(get_public_key(private_key))
+            else:
+                self.signer = hash160(get_public_key(private_key, True))
+
+            self.signature = sign(private_key, self.get_hash(tx))
+
+        def verify(self, tx):
+            hash = self.get_hash(tx)
+            pubkey = recover_pubkey_from_signature(self.signature, hash)
+
+            # TODO honour self.hash_mode
+            if isinstance(self.key_encoding, TransactionPublicKeyEncoding.Uncompressed):
+                pubkey_hash = hash160(pubkey)
+            else:
+                pubkey_hash = hash160(compressed_pubkey(pubkey))
+
+            return (
+                verify(pubkey, self.signature, hash)
+                and hash160(pubkey_hash) == self.signer
+            )
 
     class OrderIndependentMultisig:
         pass

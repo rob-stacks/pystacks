@@ -8,10 +8,15 @@ def block_simulate(
     block_id,
     auth_token,
     transactions,
+    disable_fees=False,
     base_url="http://localhost:20443",
     endpoint="/v3/blocks/simulate/",
 ):
     url = base_url + endpoint + block_id
+
+    if disable_fees:
+        url += "?disable_fees=1"
+
     json_blob = json.dumps(transactions)
 
     headers = {

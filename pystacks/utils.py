@@ -147,6 +147,10 @@ def write_u8_to_stream(stream, value):
     stream.write(struct.pack("B", value))
 
 
+def write_u16_to_stream(stream, value):
+    stream.write(struct.pack(">H", value))
+
+
 def write_u32_to_stream(stream, value):
     stream.write(struct.pack(">I", value))
 
