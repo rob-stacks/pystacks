@@ -8,6 +8,8 @@ import math
 C32_CHARACTERS = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 C32_ADDRESS_VERSION_MAINNET_SINGLESIG = 22
 C32_ADDRESS_VERSION_TESTNET_SINGLESIG = 26
+C32_ADDRESS_VERSION_MAINNET_MULTISIG = 20
+C32_ADDRESS_VERSION_TESTNET_MULTISIG = 21
 
 
 def c32_encode(input_bytes):
@@ -56,35 +58,44 @@ def generate_key(compressed=False):
     return pk.secret, pk.public_key.format(compressed=compressed)
 
 
-def compressed_pubkey(pubkey):
-    return PublicKey(pubkey).format(compressed=True)
+def compressed_public_key(public_key):
+    return PublicKey(public_key).format(compressed=True)
 
 
-def recover_pubkey_from_signature(signature, message, compressed=False):
+def recover_public_key_from_signature(signature, message, compressed=False):
     r_s = signature[1:]
     v = signature[:1]
     pub = PublicKey.from_signature_and_message(r_s + v, message, hasher=None)
     return pub.format(compressed=compressed)
 
 
-def get_public_key(privkey, compressed=False):
-    return PrivateKey(privkey).public_key.format(compressed=compressed)
+def get_public_key(private_key, compressed=False):
+    return PrivateKey(private_key).public_key.format(compressed=compressed)
 
 
-def verify(pubkey, signature, message):
+def public_key_is_compressed(public_key):
+    public_key_len = len(public_key)
+    if public_key_len == 33:
+        return True
+    elif public_key_len == 65:
+        return False
+    raise Exception("Invalid public key")
+
+
+def verify(public_key, signature, message):
     signature_der = cdata_to_der(
         recoverable_convert(deserialize_recoverable(signature[1:] + signature[:1]))
     )
     return verify_signature(
         signature_der,
         message,
-        pubkey,
+        public_key,
         hasher=None,
     )
 
 
-def sign(privkey, message):
-    pk = PrivateKey(privkey)
+def sign(private_key, message):
+    pk = PrivateKey(private_key)
     signature = pk.sign_recoverable(message, hasher=None)
     return signature[64:] + signature[:64]
 
@@ -182,6 +193,7 @@ def serialize(value):
         cls.to_stream = lambda self, stream: write_u8_to_stream(
             stream, self._pystacks_byte_type
         )
+        cls.__index__ = lambda self: value
         return cls
 
     return wrapper
@@ -233,3 +245,19 @@ class ByteType:
         value.to_stream(stream)
         stream.seek(current_pos)
         return value
+
+
+class RaiseOnUnsupported:
+
+    class Unsupported(Exception):
+        def __init__(self, subject, value):
+            super().__init__(
+                "Unsupported {}: {}".format(
+                    (
+                        subject.__class__.__qualname__
+                        if not isinstance(subject, type)
+                        else subject.__qualname__
+                    ),
+                    value,
+                )
+            )

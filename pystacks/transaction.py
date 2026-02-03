@@ -17,71 +17,27 @@ from .utils import (
     write_string_to_stream,
     write_vector_u8_to_stream,
     serialize,
-    recover_pubkey_from_signature,
+    recover_public_key_from_signature,
     ByteType,
     verify,
     hash160,
-    compressed_pubkey,
+    compressed_public_key,
     sha512_256,
     sign,
     get_public_key,
+    c32_address,
     C32_ADDRESS_VERSION_MAINNET_SINGLESIG,
     C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
+    C32_ADDRESS_VERSION_MAINNET_MULTISIG,
+    C32_ADDRESS_VERSION_TESTNET_MULTISIG,
+    public_key_is_compressed,
+    RaiseOnUnsupported,
 )
-from .clarity import Value, TypePrefix
+from .clarity import ClarityVersion, Value
+from .auth import HashMode, PrincipalData, StacksAddress
 
 from typing import Union
-
-
-class HashMode(ByteType):
-
-    class Singlesig:
-
-        @serialize(0x00)
-        class P2PKH:
-            pass
-
-        @serialize(0x02)
-        class P2WPKH:
-            pass
-
-    class Multisig:
-
-        @serialize(0x01)
-        class P2SH:
-            pass
-
-        @serialize(0x03)
-        class P2WSH:
-            pass
-
-    class OrderIndependentMultisig:
-
-        @serialize(0x05)
-        class P2SH:
-            pass
-
-        @serialize(0x07)
-        class P2WSH:
-            pass
-
-
-class ClarityVersion(ByteType):
-    @serialize(0x01)
-    class Clarity1:
-        pass
-
-    @serialize(0x02)
-    class Clarity2:
-        pass
-
-    @serialize(0x03)
-    class Clarity3:
-        pass
-
-    @serialize(0x04)
-    class Clarity4:
-        pass
+from collections.abc import Iterable
 
 
 class TransactionSmartContract:
@@ -132,41 +88,6 @@ class TenureChangeCause(ByteType):
         pass
 
 
-class PrincipalData:
-
-    class Standard:
-        def __init__(self):
-            self.version = None
-            self.data = None
-
-        @staticmethod
-        def from_stream(stream):
-            standard = PrincipalData.Standard()
-            standard.version = read_u8_from_stream(stream)
-            standard.data = stream.read(20)
-            return standard
-
-    class Contract:
-        def __init__(self):
-            self.issuer = None
-            self.name = None
-
-        @staticmethod
-        def from_stream(stream):
-            contract = PrincipalData.Contract()
-            contract.issuer = PrincipalData.Standard.from_stream(stream)
-            contract.name = read_string_from_stream(stream)
-
-    @staticmethod
-    def from_stream(stream):
-        principal_data_type = TypePrefix.from_stream(stream)
-        if isinstance(principal_data_type, TypePrefix.PrincipalStandard):
-            return PrincipalData.Standard.from_stream(stream)
-        elif isinstance(principal_data_type, TypePrefix.PrincipalContract):
-            return PrincipalData.Contract.from_stream(stream)
-        raise Exception("Unsupported PrincipalData")
-
-
 class TransactionVersion(ByteType):
 
     @serialize(C32_ADDRESS_VERSION_MAINNET_SINGLESIG)
@@ -178,25 +99,7 @@ class TransactionVersion(ByteType):
         pass
 
 
-class StacksAddress:
-
-    def __init__(self, version=None, _bytes=None):
-        self.version = version
-        self._bytes = _bytes
-
-    @staticmethod
-    def from_stream(stream):
-        stacks_address = StacksAddress()
-        stacks_address.version = TransactionVersion.from_stream(stream)
-        stacks_address._bytes = stream.read(20)
-        return stacks_address
-
-    def to_stream(self, stream):
-        self.version.to_stream(stream)
-        stream.write(self._bytes)
-
-
-class TransactionPayload:
+class TransactionPayload(RaiseOnUnsupported):
     class TokenTransfer:
         def __init__(self):
             self.principal_data = None
@@ -338,10 +241,10 @@ class TransactionPayload:
             return TransactionPayload.TenureChange.from_stream(stream)
         elif payload_id == 0x08:
             return TransactionPayload.NakamotoCoinbase.from_stream(stream)
-        raise Exception("Unsupported TransactionPayload 0x{:02x}".format(payload_id))
+        raise TransactionPayload.Unsupported(TransactionPayload, payload_id)
 
 
-class TransactionPostCondition:
+class TransactionPostCondition(RaiseOnUnsupported):
     class STX:
         pass
 
@@ -360,7 +263,9 @@ class TransactionPostCondition:
             return TransactionPostCondition.Fungible.from_stream(stream)
         elif asset_info_id == 0x02:
             return TransactionPostCondition.Nonfungible.from_stream(stream)
-        raise Exception("Unsupported TransactionPostCondition")
+        raise TransactionPostCondition.Unsupported(
+            TransactionPostCondition, asset_info_id
+        )
 
 
 class TransactionPostConditionMode(ByteType):
@@ -397,16 +302,90 @@ class TransactionPublicKeyEncoding(ByteType):
         pass
 
 
-class TransactionAuthField:
-    class PublicKey:
+class TransactionAuthFlags(ByteType):
+    @serialize(0x04)
+    class AuthStandard:
         pass
 
-    class Signature:
+    @serialize(0x05)
+    class AuthSponsored:
         pass
+
+
+class TransactionAuthFieldID(ByteType):
+
+    @serialize(0x00)
+    class PublicKeyCompressed:
+        pass
+
+    @serialize(0x01)
+    class PublicKeyUncompressed:
+        pass
+
+    @serialize(0x02)
+    class SignatureCompressed:
+        pass
+
+    @serialize(0x03)
+    class SignatureUncompressed:
+        pass
+
+
+class TransactionAuthField(RaiseOnUnsupported):
+    class PublicKey(RaiseOnUnsupported):
+        def __init__(self, compressed=None, data=None):
+            self.compressed = compressed
+            self.data = data
+
+        @staticmethod
+        def from_stream(stream):
+            auth_field_id = TransactionAuthFieldID.from_stream(stream)
+            if isinstance(auth_field_id, TransactionAuthFieldID.PublicKeyCompressed):
+                return TransactionAuthField.PublicKey(True, stream.read(33))
+            elif isinstance(
+                auth_field_id, TransactionAuthFieldID.PublicKeyUncompressed
+            ):
+                return TransactionAuthField.PublicKey(False, stream.read(33))
+            else:
+                raise TransactionAuthField.PublicKey.Unsupported(
+                    TransactionAuthFieldID, auth_field_id
+                )
+
+    class Signature:
+        def __init__(self, compressed=None, data=None):
+            self.compressed = compressed
+            self.data = data
+
+        @staticmethod
+        def from_stream(stream):
+            auth_field_id = TransactionAuthFieldID.from_stream(stream)
+            if isinstance(auth_field_id, TransactionAuthFieldID.SignatureCompressed):
+                return TransactionAuthField.Signature(True, stream.read(65))
+            elif isinstance(
+                auth_field_id, TransactionAuthFieldID.SignatureUncompressed
+            ):
+                return TransactionAuthField.Signature(False, stream.read(65))
+            else:
+                raise TransactionAuthField.Signature.Unsupported(
+                    TransactionAuthFieldID, auth_field_id
+                )
+
+    @staticmethod
+    def from_stream(stream):
+        auth_field_id = TransactionAuthFieldID.peek_from_stream(stream)
+        if isinstance(auth_field_id, TransactionAuthFieldID.PublicKeyCompressed):
+            return TransactionAuthField.PublicKey.from_stream(stream)
+        elif isinstance(auth_field_id, TransactionAuthFieldID.PublicKeyUncompressed):
+            return TransactionAuthField.PublicKey.from_stream(stream)
+        elif isinstance(auth_field_id, TransactionAuthFieldID.SignatureCompressed):
+            return TransactionAuthField.Signature.from_stream(stream)
+        elif isinstance(auth_field_id, TransactionAuthFieldID.SignatureUncompressed):
+            return TransactionAuthField.Signature.from_stream(stream)
+        raise TransactionAuthField.Unsupported(TransactionAuthFieldID, auth_field_id)
 
 
 class TransactionSpendingCondition:
-    class Singlesig:
+    class Singlesig(RaiseOnUnsupported):
         def __init__(self):
             self.hash_mode = None
             self.signer = None
@@ -437,45 +416,46 @@ class TransactionSpendingCondition:
             self.key_encoding.to_stream(stream)
             stream.write(self.signature)
 
-        def get_hash(self, tx):
+        def get_hash_tx(self, tx, cond_code):
             tx_copy = tx.copy()
             tx_copy.auth.origin.tx_fee = 0
             tx_copy.auth.origin.nonce = 0
             tx_copy.auth.origin.signature = bytes(65)
             tx_copy_txid = tx_copy.txid()
 
-            # TODO manage 0x04 here
-
             return sha512_256(
                 tx_copy_txid
-                + b"\x04"
-                + struct.pack(">QQ", tx.auth.origin.tx_fee, tx.auth.origin.nonce)
+                + struct.pack(
+                    ">BQQ", cond_code, tx.auth.origin.tx_fee, tx.auth.origin.nonce
+                )
             )
 
-        def sign(self, tx, private_key):
-            # ensure teh signature is empty before doing any operation
+        def validate_hash_mode(self):
+            if not isinstance(
+                self.hash_mode, (HashMode.Singlesig.P2PKH, HashMode.Singlesig.P2WPKH)
+            ):
+                raise TransactionSpendingCondition.Singlesig.Unsupported(
+                    self, self.hash_mode
+                )
+
+        def sign(self, data, private_key):
+            self.validate_hash_mode()
+            # ensure the signature is empty before doing any operation
             self.signature = bytes(65)
-            # TODO honour self.hash_mode
-            if isinstance(self.key_encoding, TransactionPublicKeyEncoding.Uncompressed):
-                self.signer = hash160(get_public_key(private_key))
-            else:
-                self.signer = hash160(get_public_key(private_key, True))
+            self.signer = self.hash_mode.get_public_key_hash(
+                get_public_key(private_key), self.key_encoding
+            )
+            self.signature = sign(private_key, data)
 
-            self.signature = sign(private_key, self.get_hash(tx))
-
-        def verify(self, tx):
-            hash = self.get_hash(tx)
-            pubkey = recover_pubkey_from_signature(self.signature, hash)
-
-            # TODO honour self.hash_mode
-            if isinstance(self.key_encoding, TransactionPublicKeyEncoding.Uncompressed):
-                pubkey_hash = hash160(pubkey)
-            else:
-                pubkey_hash = hash160(compressed_pubkey(pubkey))
-
+        def verify(self, data):
+            self.validate_hash_mode()
+            public_key = recover_public_key_from_signature(self.signature, data)
+            public_key_hash = self.hash_mode.get_public_key_hash(
+                public_key, self.key_encoding
+            )
             return (
-                verify(pubkey, self.signature, hash)
-                and hash160(pubkey_hash) == self.signer
+                verify(public_key, self.signature, data)
+                and public_key_hash == self.signer
             )
 
     class Multisig:
@@ -484,8 +464,9 @@ class TransactionSpendingCondition:
             self.signer = None
             self.nonce = None
             self.tx_fee = None
-            self.fields = None
+            self.fields: Iterable[TransactionAuthField] = None
             self.signatures_required = None
+            self.sighash = None
 
         @staticmethod
         def from_stream(stream):
@@ -509,45 +490,151 @@ class TransactionSpendingCondition:
             write_vector_class_to_stream(stream, self.fields)
             write_u16_to_stream(stream, self.signatures_required)
 
-        def get_hash(self, tx):
-            tx_copy = tx.copy()
-            tx_copy.auth.origin.tx_fee = 0
-            tx_copy.auth.origin.nonce = 0
-            tx_copy.auth.origin.fields = []
-            tx_copy_txid = tx_copy.txid()
+        def get_hash_tx(self, tx, cond_code):
+            if self.sighash is None:
+                self.sighash
+                tx_copy = tx.copy()
+                tx_copy.auth.origin.tx_fee = 0
+                tx_copy.auth.origin.nonce = 0
+                tx_copy.auth.origin.fields = []
+                tx_copy_txid = tx_copy.txid()
 
-            # TODO manage 0x04 here
-            return sha512_256(
-                tx_copy_txid
-                + b"\x04"
-                + struct.pack(">QQ", tx.auth.origin.tx_fee, tx.auth.origin.nonce)
-            )
-
-        def sign(self, tx, private_key):
-            # ensure the signature is empty before doing any operation
-            self.signature = bytes(65)
-            # TODO honour self.hash_mode
-            if isinstance(self.key_encoding, TransactionPublicKeyEncoding.Uncompressed):
-                self.signer = hash160(get_public_key(private_key))
-            else:
-                self.signer = hash160(get_public_key(private_key, True))
-
-            self.signature = sign(private_key, self.get_hash(tx))
-
-        def verify(self, tx):
-            hash = self.get_hash(tx)
-            pubkey = recover_pubkey_from_signature(self.signature, hash)
-
-            # TODO honour self.hash_mode
-            if isinstance(self.key_encoding, TransactionPublicKeyEncoding.Uncompressed):
-                pubkey_hash = hash160(pubkey)
-            else:
-                pubkey_hash = hash160(compressed_pubkey(pubkey))
+                self.sighash = sha512_256(
+                    tx_copy_txid
+                    + struct.pack(
+                        ">BQQ", cond_code, tx.auth.origin.tx_fee, tx.auth.origin.nonce
+                    )
+                )
 
             return (
-                verify(pubkey, self.signature, hash)
-                and hash160(pubkey_hash) == self.signer
+                self.sighash,
+                cond_code,
+                tx.auth.origin.tx_fee,
+                tx.auth.origin.nonce,
             )
+
+        def validate_hash_mode(self):
+            if not isinstance(
+                self.hash_mode, (HashMode.Multisig.P2SH, HashMode.Multisig.P2WSH)
+            ):
+                raise Exception("Invalid HashMode {}".format(self.hash_mode))
+
+        def sign(self, data, private_key):
+            self.validate_hash_mode()
+
+            if self.sighash is None:
+                self.sighash = data
+
+            if self.signer is None:
+                # num_sigs + self.fields + len(self.fields) + OP_CHECKMULTISIG = 0xae
+                # TODO check for P2WSH
+                self.signer = hash160(
+                    struct.pack("B", self.signatures_required)
+                    + b"".join(
+                        [
+                            struct.pack("B", len(field.data)) + field.data
+                            for field in self.fields
+                        ]
+                    )
+                    + struct.pack("B", len(self.fields))
+                    + b"\xae"
+                )
+
+            if self.signatures_required is None or self.signatures_required < 1:
+                raise Exception(
+                    "Invalid number of required signatures: {}".format(
+                        self.signatures_required
+                    )
+                )
+
+            # check the number of fields over signatures_required
+            if self.fields is None or len(self.fields) < self.signatures_required:
+                raise Exception(
+                    "Invalid number of fields: {} (expected {})".format(
+                        len(self.fields) if self.fields else 0, self.signatures_required
+                    )
+                )
+
+            # find the slot we are signing
+            compressed_signing_public_key = get_public_key(private_key, compressed=True)
+            uncompressed_signing_public_key = get_public_key(
+                private_key, compressed=False
+            )
+            found_slot = None
+            key_encoding = None
+            for slot, field in enumerate(self.fields):
+                if (
+                    field.compressed and field.data == compressed_signing_public_key
+                ) or (
+                    not field.compressed
+                    and field.data == uncompressed_signing_public_key
+                ):
+                    key_encoding = (
+                        TransactionPublicKeyEncoding.Compressed()
+                        if field.compressed
+                        else TransactionPublicKeyEncoding.Uncompressed()
+                    )
+                    found_slot = slot
+                    break
+
+            if found_slot is None:
+                raise Exception("Unable to find the signing slot for the specified key")
+
+            data_to_sign = sha512_256(
+                self.sighash
+                + struct.pack(
+                    ">BQQ", TransactionAuthFlags.AuthStandard(), self.tx_fee, self.nonce
+                )
+            )
+            signature = sign(private_key, data_to_sign)
+            self.fields[found_slot] = TransactionAuthField.Signature(
+                compressed=self.fields[found_slot].compressed, data=signature
+            )
+            self.sighash = sha512_256(
+                data_to_sign + struct.pack("B", key_encoding) + signature
+            )
+
+        def verify(self, data):
+            self.validate_hash_mode()
+
+            cur_sighash = sha512_256(
+                data
+                + struct.pack(
+                    ">BQQ", TransactionAuthFlags.AuthStandard(), self.tx_fee, self.nonce
+                )
+            )
+
+            valid_signatures = 0
+            for field in self.fields:
+                if isinstance(field, TransactionAuthField.Signature):
+                    public_key = recover_public_key_from_signature(
+                        field.data, cur_sighash, field.compressed
+                    )
+                    if not verify(public_key, field.data, cur_sighash):
+                        raise Exception("Validation failed")
+                    valid_signatures += 1
+                    cur_sighash = sha512_256(
+                        cur_sighash
+                        + struct.pack(
+                            "B",
+                            (
+                                TransactionPublicKeyEncoding.Compressed()
+                                if field.compressed
+                                else TransactionPublicKeyEncoding.Uncompressed()
+                            ),
+                        )
+                        + field.data
+                    )
+                elif isinstance(field, TransactionAuthField.PublicKey):
+                    continue
+                else:
+                    raise Exception("Invalid TransactionAuthField")
+
+            # TODO check self.signer
+            if valid_signatures < self.signatures_required:
+                raise Exception("Not enough signatures")
+            
+            return True
 
     class OrderIndependentMultisig:
         pass
@@ -576,24 +663,26 @@ class TransactionAuth:
             return auth_standard
 
         def to_stream(self, stream):
-            write_u8_to_stream(stream, 0x04)
+            TransactionAuthFlags.AuthStandard().to_stream(stream)
             self.origin.to_stream(stream)
 
         def sign(self, tx, private_key):
-            self.origin.sign(tx, private_key)
+            data = self.origin.get_hash_tx(tx)
+            self.origin.sign(data, private_key)
 
         def verify(self, tx):
-            return self.origin.verify(tx)
+            data = self.origin.get_hash_tx(tx)
+            return self.origin.verify(data, TransactionAuthFlags.AuthStandard())
 
     class Sponsored:
         pass
 
     @staticmethod
     def from_stream(stream):
-        auth_type = read_u8_from_stream(stream)
-        if auth_type == 0x04:
+        auth_type = TransactionAuthFlags.from_stream(stream)
+        if isinstance(auth_type, TransactionAuthFlags.AuthStandard):
             return TransactionAuth.Standard.from_stream(stream)
-        elif auth_type == 0x05:
+        elif isinstance(auth_type, TransactionAuthFlags.AuthSponsored):
             return TransactionAuth.Sponsored.from_stream(stream)
         raise Exception("Unsupported TransactionAuth {}".format(auth_type))
 

@@ -11,6 +11,24 @@ from .utils import (
 from io import BytesIO
 
 
+class ClarityVersion(ByteType):
+    @serialize(0x01)
+    class Clarity1:
+        pass
+
+    @serialize(0x02)
+    class Clarity2:
+        pass
+
+    @serialize(0x03)
+    class Clarity3:
+        pass
+
+    @serialize(0x04)
+    class Clarity4:
+        pass
+
+
 class TypePrefix(ByteType):
 
     @serialize(0)
