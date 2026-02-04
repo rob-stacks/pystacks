@@ -3,11 +3,17 @@ from .utils import (
     serialize,
     read_u128_from_stream,
     write_u128_to_stream,
+    write_u8_to_stream,
     read_u32_from_stream,
+    read_u8_from_stream,
     read_string_from_stream,
     read_ascii_string_from_stream,
     read_vector_u8_from_stream,
+    write_vector_u8_to_stream,
+    c32_address,
+    write_string_to_stream,
 )
+
 from io import BytesIO
 
 
@@ -148,7 +154,19 @@ class Value:
 
     class Sequence:
         class Buffer:
-            pass
+            def __init__(self, data=None):
+                self.data = data
+
+            @staticmethod
+            def from_stream(stream):
+                _buffer = Value.Sequence.Buffer()
+                _buffer.data = read_vector_u8_from_stream(stream)
+                return _buffer
+
+            def __repr__(self):
+                if self.data is not None:
+                    return "Buffer(0x{})".format(self.data.hex())
+                raise Exception("Invalid Buffer")
 
         class List:
             def __init__(self, items=None):
@@ -197,13 +215,62 @@ class Value:
                     _string._string = read_vector_u8_from_stream(stream).decode("utf8")
                     return _string
 
+                def to_stream(self, stream):
+                    TypePrefix.StringUTF8().to_stream(stream)
+                    write_vector_u8_to_stream(stream, self._string.encode("utf8"))
+
+                def to_bytes(self):
+                    stream = BytesIO()
+                    self.to_stream(stream)
+                    stream.seek(0)
+                    return stream.read()
+
                 def __repr__(self):
                     if self._string is not None:
                         return 'String.UTF8("{}")'.format(self._string)
                     raise Exception("Invalid String.UTF8")
 
     class Principal:
-        pass
+
+        class Standard:
+            def __init__(self, address):
+                self.address = address
+
+            def to_stream(self, stream):
+                TypePrefix.PrincipalStandard().to_stream(stream)
+                self.address.to_stream(stream)
+
+            @staticmethod
+            def from_stream(stream):
+                from .auth import StacksAddress
+
+                return Value.Principal.Standard(StacksAddress.from_stream(stream))
+
+            def __repr__(self):
+                return "PrincipalStandard({})".format(self.address)
+
+        class Contract:
+            def __init__(self, address, contract_name):
+                self.address = address
+                self.contract_name = contract_name
+
+            def to_stream(self, stream):
+                TypePrefix.PrincipalContract().to_stream(stream)
+                self.address.to_stream(stream)
+                write_string_to_stream(stream, self.contract_name)
+
+            @staticmethod
+            def from_stream(stream):
+                from .auth import StacksAddress
+
+                return Value.Principal.Contract(
+                    StacksAddress.from_stream(stream), read_string_from_stream(stream)
+                )
+
+            def __repr__(self):
+                return "PrincipalContract({}.{})".format(
+                    self.address, self.contract_name
+                )
 
     class Tuple:
         def __init__(self, items=None):
@@ -302,8 +369,16 @@ class Value:
             return Value.Tuple.from_stream(stream)
         elif isinstance(type_prefix, TypePrefix.StringASCII):
             return Value.Sequence.String.ASCII.from_stream(stream)
+        elif isinstance(type_prefix, TypePrefix.StringUTF8):
+            return Value.Sequence.String.UTF8.from_stream(stream)
         elif isinstance(type_prefix, TypePrefix.List):
             return Value.Sequence.List.from_stream(stream)
+        elif isinstance(type_prefix, TypePrefix.Buffer):
+            return Value.Sequence.Buffer.from_stream(stream)
+        elif isinstance(type_prefix, TypePrefix.PrincipalStandard):
+            return Value.Principal.Standard.from_stream(stream)
+        elif isinstance(type_prefix, TypePrefix.PrincipalContract):
+            return Value.Principal.Contract.from_stream(stream)
         else:
             raise Exception("Unsupported TypePrefix: {}".format(type_prefix))
 

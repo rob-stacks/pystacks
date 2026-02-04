@@ -18,3 +18,8 @@ class TestClarity(unittest.TestCase):
 
     def test_value_bool_true_serialized(self):
         self.assertEqual(Value.Bool(True).to_bytes(), b"\x03")
+
+    def test_value_string_utf8_serialized(self):
+        self.assertEqual(
+            Value.Sequence.String.UTF8("test").to_bytes(), b"\x0e\x00\x00\x00\x04test"
+        )

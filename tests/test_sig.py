@@ -6,13 +6,13 @@ from pystacks.transaction import (
     TransactionPublicKeyEncoding,
     TransactionAuthFlags,
 )
-from pystacks.utils import generate_key
+from pystacks.utils import generate_private_key, generate_private_and_public_keys
 
 
 class TestSig(unittest.TestCase):
 
     def test_single_sig(self):
-        private_key, _ = generate_key()
+        private_key = generate_private_key()
         single_sig = TransactionSpendingCondition.Singlesig()
         single_sig.hash_mode = HashMode.Singlesig.P2PKH()
         single_sig.key_encoding = TransactionPublicKeyEncoding.Compressed()
@@ -24,7 +24,7 @@ class TestSig(unittest.TestCase):
         self.assertTrue(single_sig.verify(b"!HelloWorldHelloWorldHelloWorld!"))
 
     def test_single_sig_uncompressed(self):
-        private_key, _ = generate_key()
+        private_key = generate_private_key()
         single_sig = TransactionSpendingCondition.Singlesig()
         single_sig.hash_mode = HashMode.Singlesig.P2PKH()
         single_sig.key_encoding = TransactionPublicKeyEncoding.Uncompressed()
@@ -36,7 +36,7 @@ class TestSig(unittest.TestCase):
         self.assertTrue(single_sig.verify(b"!HelloWorldHelloWorldHelloWorld!"))
 
     def test_single_sig_segwit(self):
-        private_key, _ = generate_key()
+        private_key = generate_private_key()
         single_sig = TransactionSpendingCondition.Singlesig()
         single_sig.hash_mode = HashMode.Singlesig.P2WPKH()
         single_sig.key_encoding = TransactionPublicKeyEncoding.Compressed()
@@ -48,7 +48,7 @@ class TestSig(unittest.TestCase):
         self.assertTrue(single_sig.verify(b"!HelloWorldHelloWorldHelloWorld!"))
 
     def test_single_sig_unsupported_auth_mode(self):
-        private_key, _ = generate_key()
+        private_key = generate_private_key()
         single_sig = TransactionSpendingCondition.Singlesig()
         single_sig.hash_mode = HashMode.Multisig.P2SH()
         single_sig.key_encoding = TransactionPublicKeyEncoding.Compressed()
@@ -62,7 +62,7 @@ class TestSig(unittest.TestCase):
         )
 
     def test_multi_sig_1_of_1(self):
-        private_key0, public_key0 = generate_key()
+        private_key0, public_key0 = generate_private_and_public_keys()
         multi_sig = TransactionSpendingCondition.Multisig()
         multi_sig.hash_mode = HashMode.Multisig.P2SH()
         multi_sig.fields = [TransactionAuthField.PublicKey(False, public_key0)]
@@ -78,8 +78,8 @@ class TestSig(unittest.TestCase):
         self.assertTrue(multi_sig.verify(b"*HelloWorldHelloWorldHelloWorld*"))
 
     def test_multi_sig_2_of_2(self):
-        private_key0, public_key0 = generate_key()
-        private_key1, public_key1 = generate_key()
+        private_key0, public_key0 = generate_private_and_public_keys()
+        private_key1, public_key1 = generate_private_and_public_keys()
         multi_sig = TransactionSpendingCondition.Multisig()
         multi_sig.hash_mode = HashMode.Multisig.P2SH()
         multi_sig.fields = [
@@ -103,8 +103,8 @@ class TestSig(unittest.TestCase):
         self.assertTrue(multi_sig.verify(b"*HelloWorldHelloWorldHelloWorld*"))
 
     def test_multi_sig_1_of_2(self):
-        private_key0, public_key0 = generate_key()
-        private_key1, public_key1 = generate_key()
+        private_key0, public_key0 = generate_private_and_public_keys()
+        private_key1, public_key1 = generate_private_and_public_keys()
         multi_sig = TransactionSpendingCondition.Multisig()
         multi_sig.hash_mode = HashMode.Multisig.P2SH()
         multi_sig.fields = [
@@ -124,9 +124,9 @@ class TestSig(unittest.TestCase):
         self.assertTrue(multi_sig.verify(b"*HelloWorldHelloWorldHelloWorld*"))
 
     def test_multi_sig_3_of_3(self):
-        private_key0, public_key0 = generate_key()
-        private_key1, public_key1 = generate_key()
-        private_key2, public_key2 = generate_key(compressed=True)
+        private_key0, public_key0 = generate_private_and_public_keys()
+        private_key1, public_key1 = generate_private_and_public_keys()
+        private_key2, public_key2 = generate_private_and_public_keys(compressed=True)
         multi_sig = TransactionSpendingCondition.Multisig()
         multi_sig.hash_mode = HashMode.Multisig.P2SH()
         multi_sig.fields = [
@@ -156,9 +156,9 @@ class TestSig(unittest.TestCase):
         self.assertTrue(multi_sig.verify(b"*HelloWorldHelloWorldHelloWorld*"))
 
     def test_multi_sig_3_of_3_unordered(self):
-        private_key0, public_key0 = generate_key()
-        private_key1, public_key1 = generate_key()
-        private_key2, public_key2 = generate_key(compressed=True)
+        private_key0, public_key0 = generate_private_and_public_keys()
+        private_key1, public_key1 = generate_private_and_public_keys()
+        private_key2, public_key2 = generate_private_and_public_keys(compressed=True)
         multi_sig = TransactionSpendingCondition.Multisig()
         multi_sig.hash_mode = HashMode.Multisig.P2SH()
         multi_sig.fields = [

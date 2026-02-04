@@ -21,7 +21,7 @@ from .utils import (
     ByteType,
     verify,
     hash160,
-    compressed_public_key,
+    get_compressed_public_key,
     sha512_256,
     sign,
     get_public_key,
@@ -30,7 +30,7 @@ from .utils import (
     C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
     C32_ADDRESS_VERSION_MAINNET_MULTISIG,
     C32_ADDRESS_VERSION_TESTNET_MULTISIG,
-    public_key_is_compressed,
+    is_public_key_compressed,
     RaiseOnUnsupported,
 )
 from .clarity import ClarityVersion, Value
@@ -244,12 +244,142 @@ class TransactionPayload(RaiseOnUnsupported):
         raise TransactionPayload.Unsupported(TransactionPayload, payload_id)
 
 
-class TransactionPostCondition(RaiseOnUnsupported):
+class AssetInfoID(ByteType):
+
+    @serialize(0)
     class STX:
         pass
 
-    class Fungible:
+    @serialize(1)
+    class FungibleAsset:
         pass
+
+    @serialize(2)
+    class NonfungibleAsset:
+        pass
+
+
+class PostConditionPrincipalID(ByteType):
+
+    @serialize(0x01)
+    class Origin:
+        pass
+
+    @serialize(0x02)
+    class Standard:
+        pass
+
+    @serialize(0x03)
+    class Contract:
+        pass
+
+
+class FungibleConditionCode(ByteType):
+
+    @serialize(0x01)
+    class SentEq:
+        pass
+
+    @serialize(0x02)
+    class SentGt:
+        pass
+
+    @serialize(0x03)
+    class SentGe:
+        pass
+
+    @serialize(0x04)
+    class SentLt:
+        pass
+
+    @serialize(0x05)
+    class SentLe:
+        pass
+
+
+class AssetInfo:
+
+    def __init__(self, address, contract_name, asset_name):
+        self.address = address
+        self.contract_name = contract_name
+        self.asset_name = asset_name
+
+    @staticmethod
+    def from_stream(stream):
+        address = StacksAddress.from_stream(stream)
+        contract_name = read_string_from_stream(stream)
+        asset_name = read_string_from_stream(stream)
+        return AssetInfo(address, contract_name, asset_name)
+
+
+class PostConditionPrincipal:
+
+    class Origin:
+        pass
+
+    class Standard:
+
+        def __init__(self, address):
+            self.address = address
+
+        @staticmethod
+        def from_stream(stream):
+            return PostConditionPrincipal.Standard(StacksAddress.from_stream(stream))
+
+    class Contract:
+        def __init__(self, address, contract_name):
+            self.address = address
+            self.contract_name = contract_name
+
+        @staticmethod
+        def from_stream(stream):
+            return PostConditionPrincipal.Contract(
+                StacksAddress.from_stream(stream), read_string_from_stream(stream)
+            )
+
+    @staticmethod
+    def from_stream(stream):
+        post_condition_principal_id = PostConditionPrincipalID.from_stream(stream)
+        if isinstance(post_condition_principal_id, PostConditionPrincipalID.Origin):
+            return PostConditionPrincipal.Origin()
+        elif isinstance(post_condition_principal_id, PostConditionPrincipalID.Standard):
+            return PostConditionPrincipal.Standard.from_stream(stream)
+        elif isinstance(post_condition_principal_id, PostConditionPrincipalID.Contract):
+            return PostConditionPrincipal.Contract.from_stream(stream)
+
+
+class TransactionPostCondition(RaiseOnUnsupported):
+    class STX:
+        def __init__(self, principal, fungible_condition_code, amount):
+            self.principal = principal
+            self.fungible_condition_code = fungible_condition_code
+            self.amount = amount
+
+        @staticmethod
+        def from_stream(stream):
+            principal = PostConditionPrincipal.from_stream(stream)
+            fungible_condition_code = FungibleConditionCode.from_stream(stream)
+            amount = read_u64_from_stream(stream)
+            return TransactionPostCondition.STX(
+                principal, fungible_condition_code, amount
+            )
+
+    class Fungible:
+        def __init__(self, principal, asset_info, fungible_condition_code, amount):
+            self.principal = principal
+            self.asset_info = asset_info
+            self.fungible_condition_code = fungible_condition_code
+            self.amount = amount
+
+        @staticmethod
+        def from_stream(stream):
+            principal = PostConditionPrincipal.from_stream(stream)
+            asset_info = AssetInfo.from_stream(stream)
+            fungible_condition_code = FungibleConditionCode.from_stream(stream)
+            amount = read_u64_from_stream(stream)
+            return TransactionPostCondition.Fungible(
+                principal, asset_info, fungible_condition_code, amount
+            )
 
     class Nonfungible:
         pass
@@ -633,7 +763,7 @@ class TransactionSpendingCondition:
             # TODO check self.signer
             if valid_signatures < self.signatures_required:
                 raise Exception("Not enough signatures")
-            
+
             return True
 
     class OrderIndependentMultisig:

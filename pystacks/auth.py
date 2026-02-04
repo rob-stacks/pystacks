@@ -4,8 +4,8 @@ from .utils import (
     read_string_from_stream,
     serialize,
     hash160,
-    compressed_public_key,
-    public_key_is_compressed,
+    get_compressed_public_key,
+    is_public_key_compressed,
     c32_address,
 )
 from .clarity import TypePrefix
@@ -55,13 +55,13 @@ class HashMode(ByteType):
         class P2PKH:
             def get_public_key_hash(self, public_key, compressed):
                 if compressed:
-                    return hash160(compressed_public_key(public_key))
+                    return hash160(get_compressed_public_key(public_key))
                 else:
                     return hash160(public_key)
 
             def public_key_to_address(self, version, public_key):
                 public_key_hash = self.get_public_key_hash(
-                    public_key, public_key_is_compressed(public_key)
+                    public_key, is_public_key_compressed(public_key)
                 )
                 return c32_address(version, public_key_hash)
 
@@ -69,7 +69,7 @@ class HashMode(ByteType):
         class P2WPKH:
             def get_public_key_hash(self, public_key, compressed):
                 if compressed:
-                    public_key_hash = hash160(compressed_public_key(public_key))
+                    public_key_hash = hash160(get_compressed_public_key(public_key))
                 else:
                     public_key_hash = hash160(public_key)
                 # OP_FALSE + len(key_hash) + key_hash
@@ -81,7 +81,7 @@ class HashMode(ByteType):
 
             def public_key_to_address(self, version, public_key):
                 public_key_hash = self.get_public_key_hash(
-                    public_key, public_key_is_compressed(public_key)
+                    public_key, is_public_key_compressed(public_key)
                 )
                 return c32_address(version, public_key_hash)
 
@@ -115,10 +115,13 @@ class StacksAddress:
     @staticmethod
     def from_stream(stream):
         stacks_address = StacksAddress()
-        stacks_address.version = TransactionVersion.from_stream(stream)
+        stacks_address.version = read_u8_from_stream(stream)
         stacks_address._bytes = stream.read(20)
         return stacks_address
 
     def to_stream(self, stream):
         self.version.to_stream(stream)
         stream.write(self._bytes)
+
+    def __repr__(self):
+        return c32_address(self.version, self._bytes)

@@ -53,12 +53,17 @@ def c32_address(version, data):
     return (b"S" + bytes((C32_CHARACTERS[version],)) + final_data).decode("utf8")
 
 
-def generate_key(compressed=False):
+def generate_private_key():
+    pk = PrivateKey()
+    return pk.secret
+
+
+def generate_private_and_public_keys(compressed=False):
     pk = PrivateKey()
     return pk.secret, pk.public_key.format(compressed=compressed)
 
 
-def compressed_public_key(public_key):
+def get_compressed_public_key(public_key):
     return PublicKey(public_key).format(compressed=True)
 
 
@@ -73,7 +78,7 @@ def get_public_key(private_key, compressed=False):
     return PrivateKey(private_key).public_key.format(compressed=compressed)
 
 
-def public_key_is_compressed(public_key):
+def is_public_key_compressed(public_key):
     public_key_len = len(public_key)
     if public_key_len == 33:
         return True
@@ -233,7 +238,7 @@ class ByteType:
 
         found_class = traverse(cls)
         if not found_class:
-            raise Exception("Unsupported {}".format(cls))
+            raise Exception("Unsupported {}: {}".format(cls, _type))
         return found_class()
 
     @classmethod

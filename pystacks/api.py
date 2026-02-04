@@ -38,10 +38,17 @@ def block_simulate(
 def block_replay(
     block_id,
     auth_token,
+    profiler=False,
     base_url="http://localhost:20443",
     endpoint="/v3/blocks/replay/",
 ):
-    url = base_url + endpoint + block_id
+    if isinstance(block_id, bytes):
+        block_id = block_id.hex()
+
+    url = "{}{}{}".format(base_url, endpoint, block_id)
+
+    if profiler:
+        url += "?profiler=1"
 
     headers = {
         "Authorization": auth_token,
@@ -62,6 +69,23 @@ def block_v3(
     endpoint="/v3/blocks/",
 ):
     url = base_url + endpoint + block_id
+
+    req = urllib.request.Request(url, method="GET")
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = response.read()
+            return NakamotoBlock.from_stream(BytesIO(data))
+    except urllib.error.HTTPError as e:
+        raise Exception("HTTP {}: {}".format(e.code, e.read().decode("utf8"))) from None
+
+
+def block_by_height(
+    block_height,
+    base_url="http://localhost:20443",
+    endpoint="/v3/blocks/height/",
+):
+    url = "{}{}{}".format(base_url, endpoint, block_height)
 
     req = urllib.request.Request(url, method="GET")
 
