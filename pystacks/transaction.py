@@ -116,6 +116,12 @@ class TransactionPayload(RaiseOnUnsupported):
             token_transfer.memo = stream.read(34)
             return token_transfer
 
+        def to_stream(self, stream):
+            write_u8_to_stream(stream, 0x00)
+            self.principal_data.to_stream(stream)
+            write_u64_to_stream(stream, self.amount)
+            stream.write(bytes(34))
+
     class ContractCall:
         def __init__(
             self,
@@ -569,7 +575,7 @@ class TransactionSpendingCondition:
                 tx_copy_txid
                 + struct.pack(
                     ">BQQ",
-                    self.key_encoding,
+                    TransactionAuthFlags.AuthStandard(),
                     tx.auth.origin.tx_fee,
                     tx.auth.origin.nonce,
                 )
@@ -651,7 +657,7 @@ class TransactionSpendingCondition:
                     tx_copy_txid
                     + struct.pack(
                         ">BQQ",
-                        tx_copy.auth.origin.key_encoding,
+                        TransactionAuthFlags.AuthStandard(),
                         tx.auth.origin.tx_fee,
                         tx.auth.origin.nonce,
                     )

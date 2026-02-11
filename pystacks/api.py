@@ -8,6 +8,7 @@ def block_simulate(
     block_id,
     auth_token,
     transactions,
+    mint=None,
     profiler=False,
     use_cache=False,
     base_url="http://localhost:20443",
@@ -30,7 +31,9 @@ def block_simulate(
 
     url = "{}{}{}{}".format(base_url, endpoint, block_id, query_string)
 
-    json_blob = json.dumps({"transactions_hex": transactions, "mint": []})
+    json_blob = json.dumps(
+        {"transactions_hex": transactions, "mint": mint if mint else []}
+    )
 
     headers = {
         "Authorization": auth_token,

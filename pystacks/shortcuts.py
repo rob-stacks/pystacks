@@ -22,7 +22,7 @@ def contract_deploy_on_mainnet_with_p2pkh(
 ):
     tx = Transaction()
     tx.version = 0x00
-    tx.chain_id = 0x00000001
+    tx.chain_id = 1
     tx.anchor_mode = TransactionAnchorMode.Any()
     tx.auth = TransactionAuth.Standard()
     tx.auth.origin = TransactionSpendingCondition.Singlesig()
