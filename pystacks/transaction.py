@@ -548,7 +548,17 @@ class TransactionSpendingCondition:
             self.key_encoding.to_stream(stream)
             stream.write(self.signature)
 
-        def get_hash_tx(self, tx, cond_code):
+        def get_hash_tx(self, private_key, tx):
+            # ensure the signature is empty before doing any operation
+            self.signature = bytes(65)
+            if not self.signer:
+                self.signer = self.hash_mode.get_public_key_hash(
+                    get_public_key(private_key),
+                    isinstance(
+                        self.key_encoding, TransactionPublicKeyEncoding.Compressed
+                    ),
+                )
+            print(self.signer.hex())
             tx_copy = tx.copy()
             tx_copy.auth.origin.tx_fee = 0
             tx_copy.auth.origin.nonce = 0
@@ -558,7 +568,10 @@ class TransactionSpendingCondition:
             return sha512_256(
                 tx_copy_txid
                 + struct.pack(
-                    ">BQQ", cond_code, tx.auth.origin.tx_fee, tx.auth.origin.nonce
+                    ">BQQ",
+                    self.key_encoding,
+                    tx.auth.origin.tx_fee,
+                    tx.auth.origin.nonce,
                 )
             )
 
@@ -572,18 +585,21 @@ class TransactionSpendingCondition:
 
         def sign(self, data, private_key):
             self.validate_hash_mode()
-            # ensure the signature is empty before doing any operation
-            self.signature = bytes(65)
-            self.signer = self.hash_mode.get_public_key_hash(
-                get_public_key(private_key), self.key_encoding
-            )
+            if not self.signer:
+                self.signer = self.hash_mode.get_public_key_hash(
+                    get_public_key(private_key),
+                    isinstance(
+                        self.key_encoding, TransactionPublicKeyEncoding.Compressed
+                    ),
+                )
             self.signature = sign(private_key, data)
 
         def verify(self, data):
             self.validate_hash_mode()
             public_key = recover_public_key_from_signature(self.signature, data)
             public_key_hash = self.hash_mode.get_public_key_hash(
-                public_key, self.key_encoding
+                public_key,
+                isinstance(self.key_encoding, TransactionPublicKeyEncoding.Compressed),
             )
             return (
                 verify(public_key, self.signature, data)
@@ -622,7 +638,7 @@ class TransactionSpendingCondition:
             write_vector_class_to_stream(stream, self.fields)
             write_u16_to_stream(stream, self.signatures_required)
 
-        def get_hash_tx(self, tx, cond_code):
+        def get_hash_tx(self, tx):
             if self.sighash is None:
                 self.sighash
                 tx_copy = tx.copy()
@@ -634,13 +650,16 @@ class TransactionSpendingCondition:
                 self.sighash = sha512_256(
                     tx_copy_txid
                     + struct.pack(
-                        ">BQQ", cond_code, tx.auth.origin.tx_fee, tx.auth.origin.nonce
+                        ">BQQ",
+                        tx_copy.auth.origin.key_encoding,
+                        tx.auth.origin.tx_fee,
+                        tx.auth.origin.nonce,
                     )
                 )
 
             return (
                 self.sighash,
-                cond_code,
+                tx_copy.auth.origin.key_encoding,
                 tx.auth.origin.tx_fee,
                 tx.auth.origin.nonce,
             )
@@ -799,7 +818,7 @@ class TransactionAuth:
             self.origin.to_stream(stream)
 
         def sign(self, tx, private_key):
-            data = self.origin.get_hash_tx(tx)
+            data = self.origin.get_hash_tx(private_key, tx)
             self.origin.sign(data, private_key)
 
         def verify(self, tx):

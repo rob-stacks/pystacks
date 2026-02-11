@@ -13,20 +13,24 @@ def block_simulate(
     base_url="http://localhost:20443",
     endpoint="/v3/blocks/simulate/",
 ):
-    url = base_url + endpoint + block_id
+    if isinstance(block_id, bytes):
+        block_id = block_id.hex()
 
+    params = []
     query_string = ""
 
     if profiler:
-        query_string += "profiler=1"
+        params.append("profiler=1")
 
     if use_cache:
-        query_string += "use_cache=1"
+        params.append("use_cache=1")
 
-    if query_string:
-        query_string = "?" + query_string
+    if params:
+        query_string = "?" + "&".join(params)
 
-    json_blob = json.dumps(transactions)
+    url = "{}{}{}{}".format(base_url, endpoint, block_id, query_string)
+
+    json_blob = json.dumps({"transactions_hex": transactions, "mint": []})
 
     headers = {
         "Authorization": auth_token,
@@ -55,19 +59,19 @@ def block_replay(
     if isinstance(block_id, bytes):
         block_id = block_id.hex()
 
+    params = []
+    query_string = ""
+
     if profiler:
-        query_string += "profiler=1"
+        params.append("profiler=1")
 
     if use_cache:
-        query_string += "use_cache=1"
+        params.append("use_cache=1")
 
-    if query_string:
-        query_string = "?" + query_string
+    if params:
+        query_string = "?" + "&".join(params)
 
-    url = "{}{}{}{}".format(base_url, endpoint, block_id)
-
-    if profiler:
-        url += "?profiler=1"
+    url = "{}{}{}{}".format(base_url, endpoint, block_id, query_string)
 
     headers = {
         "Authorization": auth_token,

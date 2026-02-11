@@ -48,4 +48,5 @@ def sign(private_key, message):
                 break
         except MalformedPointError:
             continue
+
     return bytes((v,)) + signature
