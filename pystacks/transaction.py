@@ -17,21 +17,23 @@ from .utils import (
     write_string_to_stream,
     write_vector_u8_to_stream,
     serialize,
-    recover_public_key_from_signature,
     ByteType,
-    verify,
     hash160,
-    get_compressed_public_key,
     sha512_256,
-    sign,
-    get_public_key,
     c32_address,
     C32_ADDRESS_VERSION_MAINNET_SINGLESIG,
     C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
     C32_ADDRESS_VERSION_MAINNET_MULTISIG,
     C32_ADDRESS_VERSION_TESTNET_MULTISIG,
-    is_public_key_compressed,
     RaiseOnUnsupported,
+)
+from .curves import (
+    recover_public_key_from_signature,
+    get_compressed_public_key,
+    sign,
+    verify,
+    get_public_key,
+    is_public_key_compressed,
 )
 from .clarity import ClarityVersion, Value
 from .auth import HashMode, PrincipalData, StacksAddress

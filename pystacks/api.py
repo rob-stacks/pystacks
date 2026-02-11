@@ -8,14 +8,23 @@ def block_simulate(
     block_id,
     auth_token,
     transactions,
-    disable_fees=False,
+    profiler=False,
+    use_cache=False,
     base_url="http://localhost:20443",
     endpoint="/v3/blocks/simulate/",
 ):
     url = base_url + endpoint + block_id
 
-    if disable_fees:
-        url += "?disable_fees=1"
+    query_string = ""
+
+    if profiler:
+        query_string += "profiler=1"
+
+    if use_cache:
+        query_string += "use_cache=1"
+
+    if query_string:
+        query_string = "?" + query_string
 
     json_blob = json.dumps(transactions)
 
@@ -39,13 +48,23 @@ def block_replay(
     block_id,
     auth_token,
     profiler=False,
+    use_cache=False,
     base_url="http://localhost:20443",
     endpoint="/v3/blocks/replay/",
 ):
     if isinstance(block_id, bytes):
         block_id = block_id.hex()
 
-    url = "{}{}{}".format(base_url, endpoint, block_id)
+    if profiler:
+        query_string += "profiler=1"
+
+    if use_cache:
+        query_string += "use_cache=1"
+
+    if query_string:
+        query_string = "?" + query_string
+
+    url = "{}{}{}{}".format(base_url, endpoint, block_id)
 
     if profiler:
         url += "?profiler=1"

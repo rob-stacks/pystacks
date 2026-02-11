@@ -1,6 +1,3 @@
-from coincurve import PublicKey, PrivateKey
-from coincurve.ecdsa import deserialize_recoverable, recoverable_convert, cdata_to_der
-from coincurve.utils import verify_signature
 import struct
 import hashlib
 import math
@@ -51,58 +48,6 @@ def c32_address(version, data):
     checksum = sha256(sha256(bytes((version,)) + data))[:4]
     final_data = c32_encode(data + checksum)
     return (b"S" + bytes((C32_CHARACTERS[version],)) + final_data).decode("utf8")
-
-
-def generate_private_key():
-    pk = PrivateKey()
-    return pk.secret
-
-
-def generate_private_and_public_keys(compressed=False):
-    pk = PrivateKey()
-    return pk.secret, pk.public_key.format(compressed=compressed)
-
-
-def get_compressed_public_key(public_key):
-    return PublicKey(public_key).format(compressed=True)
-
-
-def recover_public_key_from_signature(signature, message, compressed=False):
-    r_s = signature[1:]
-    v = signature[:1]
-    pub = PublicKey.from_signature_and_message(r_s + v, message, hasher=None)
-    return pub.format(compressed=compressed)
-
-
-def get_public_key(private_key, compressed=False):
-    return PrivateKey(private_key).public_key.format(compressed=compressed)
-
-
-def is_public_key_compressed(public_key):
-    public_key_len = len(public_key)
-    if public_key_len == 33:
-        return True
-    elif public_key_len == 65:
-        return False
-    raise Exception("Invalid public key")
-
-
-def verify(public_key, signature, message):
-    signature_der = cdata_to_der(
-        recoverable_convert(deserialize_recoverable(signature[1:] + signature[:1]))
-    )
-    return verify_signature(
-        signature_der,
-        message,
-        public_key,
-        hasher=None,
-    )
-
-
-def sign(private_key, message):
-    pk = PrivateKey(private_key)
-    signature = pk.sign_recoverable(message, hasher=None)
-    return signature[64:] + signature[:64]
 
 
 def read_vector_class_from_stream(stream, _class):

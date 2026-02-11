@@ -4,10 +4,9 @@ from .utils import (
     read_string_from_stream,
     serialize,
     hash160,
-    get_compressed_public_key,
-    is_public_key_compressed,
     c32_address,
 )
+from .curves import get_compressed_public_key, is_public_key_compressed
 from .clarity import TypePrefix
 import struct
 

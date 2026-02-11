@@ -6,7 +6,7 @@ from pystacks.transaction import (
     HashMode,
     TransactionPublicKeyEncoding,
 )
-from pystacks.utils import generate_private_key
+from pystacks.curves import generate_private_key
 from io import BytesIO
 
 

@@ -6,7 +6,7 @@ from pystacks.transaction import (
     TransactionPublicKeyEncoding,
     TransactionAuthFlags,
 )
-from pystacks.utils import generate_private_key, generate_private_and_public_keys
+from pystacks.curves import generate_private_key, generate_private_and_public_keys
 
 
 class TestSig(unittest.TestCase):
