@@ -1,6 +1,6 @@
 import struct
 import hashlib
-import math
+from .curves import get_public_key
 
 C32_CHARACTERS = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 C32_ADDRESS_VERSION_MAINNET_SINGLESIG = 22
@@ -38,6 +38,45 @@ def c32_encode(input_bytes):
     for current_value in input_bytes:
         if current_value == 0:
             result += b"0"
+        else:
+            break
+
+    return bytes(reversed(result))
+
+
+def c32_decode(input_bytes):
+    decoded = []
+    result = []
+    for current_value in reversed(input_bytes):
+        decoded.append(C32_CHARACTERS.index(current_value))
+
+    if len(decoded) != len(input_bytes):
+        raise Exception("Invalid c32 sequence")
+
+    carry = 0
+    carry_bits = 0
+
+    for current_5bit in decoded:
+        carry += current_5bit << carry_bits
+        carry_bits += 5
+
+        if carry_bits >= 8:
+            result.append(carry & ((1 << 8) - 1))
+            carry_bits -= 8
+            carry >>= 8
+
+    if carry_bits > 0:
+        result.append(carry)
+
+    for _ in range(0, len(result)):
+        v = result.pop()
+        if v != 0:
+            result.append(v)
+            break
+
+    for current_value in reversed(decoded):
+        if current_value == 0:
+            result.append(0)
         else:
             break
 
@@ -162,6 +201,34 @@ def sha512_256(data):
         "sha512_256",
         data,
     ).digest()
+
+
+def stx_mainnet_address_from_private_key(private_key):
+    return c32_address(
+        C32_ADDRESS_VERSION_MAINNET_SINGLESIG,
+        hash160(get_public_key(private_key, compressed=True)),
+    )
+
+
+def stx_testnet_address_from_private_key(private_key):
+    return c32_address(
+        C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
+        hash160(get_public_key(private_key, compressed=True)),
+    )
+
+
+def stx_address_to_principal_data(stx_address):
+    if "." in stx_address:
+        return {"Contract": []}
+    else:
+        stx_address_bytes = stx_address.encode("ascii")
+        version, data = stx_address_bytes[1], stx_address_bytes[2:]
+        return {
+            "Standard": [
+                C32_CHARACTERS.index(version),
+                list(c32_decode(data)[:-4]),
+            ]
+        }
 
 
 class ByteType:
