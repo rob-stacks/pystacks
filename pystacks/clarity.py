@@ -3,14 +3,11 @@ from .utils import (
     serialize,
     read_u128_from_stream,
     write_u128_to_stream,
-    write_u8_to_stream,
     read_u32_from_stream,
-    read_u8_from_stream,
     read_string_from_stream,
     read_ascii_string_from_stream,
     read_vector_u8_from_stream,
     write_vector_u8_to_stream,
-    c32_address,
     write_string_to_stream,
 )
 
@@ -36,7 +33,6 @@ class ClarityVersion(ByteType):
 
 
 class TypePrefix(ByteType):
-
     @serialize(0)
     class Int:
         pass
@@ -99,7 +95,6 @@ class TypePrefix(ByteType):
 
 
 class Value:
-
     class Int:
         pass
 
@@ -231,7 +226,6 @@ class Value:
                     raise Exception("Invalid String.UTF8")
 
     class Principal:
-
         class Standard:
             def __init__(self, address):
                 self.address = address
@@ -386,3 +380,12 @@ class Value:
     def from_bytes(data):
         stream = BytesIO(data)
         return Value.from_stream(stream)
+
+
+if __name__ == "__main__":
+    import sys
+
+    for line in sys.stdin:
+        line = line.strip()
+        print(f"Decoding {line}:")
+        print("  ", Value.from_bytes(bytes.fromhex(line)))

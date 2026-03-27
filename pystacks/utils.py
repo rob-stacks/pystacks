@@ -232,7 +232,6 @@ def stx_address_to_principal_data(stx_address):
 
 
 class ByteType:
-
     @classmethod
     def from_stream(cls, stream):
         _type = stream.read(1)[0]
@@ -265,7 +264,6 @@ class ByteType:
 
 
 class RaiseOnUnsupported:
-
     class Unsupported(Exception):
         def __init__(self, subject, value):
             super().__init__(

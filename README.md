@@ -51,3 +51,13 @@ pprint(
     )
 )
 ```
+
+## Install dependencies
+
+Use `uv run ...`.
+
+## Decoding Clarity values
+
+```bash
+echo 0200000000 | uv run -m pystacks.clarity
+```
