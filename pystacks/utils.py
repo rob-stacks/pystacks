@@ -143,6 +143,11 @@ def read_u128_from_stream(stream):
     return high << 64 | low
 
 
+def read_i128_from_stream(stream):
+    high, low = struct.unpack(">qQ", stream.read(8 * 2))
+    return high << 64 | low
+
+
 def write_u8_to_stream(stream, value):
     stream.write(struct.pack("B", value))
 
@@ -163,6 +168,12 @@ def write_u128_to_stream(stream, value):
     high = value >> 64
     low = value & 0xFFFFFFFFFFFFFFFF
     stream.write(struct.pack(">QQ", high, low))
+
+
+def write_i128_to_stream(stream, value):
+    high = value >> 64
+    low = value & 0xFFFFFFFFFFFFFFFF
+    stream.write(struct.pack(">qQ", high, low))
 
 
 def write_vector_u8_to_stream(stream, data):

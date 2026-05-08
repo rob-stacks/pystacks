@@ -2,7 +2,9 @@ from .utils import (
     ByteType,
     serialize,
     read_u128_from_stream,
+    read_i128_from_stream,
     write_u128_to_stream,
+    write_i128_to_stream,
     read_u32_from_stream,
     read_string_from_stream,
     read_ascii_string_from_stream,
@@ -96,7 +98,21 @@ class TypePrefix(ByteType):
 
 class Value:
     class Int:
-        pass
+        def __init__(self, value):
+            self.value = value
+
+        def to_stream(self, stream):
+            TypePrefix.Int().to_stream(stream)
+            write_i128_to_stream(stream, self.value)
+
+        @staticmethod
+        def from_stream(stream):
+            return Value.Int(read_i128_from_stream(stream))
+
+        def __repr__(self):
+            if self.value is not None:
+                return "UInt({})".format(self.value)
+            raise Exception("Invalid UInt")
 
     class UInt:
         def __init__(self, value):

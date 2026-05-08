@@ -2,15 +2,19 @@ try:
     from .curves_backends.coincurve_backend import (
         generate_private_key,
         recover_public_key_from_signature,
+        get_compressed_public_key,
         get_uncompressed_public_key,
         get_public_key,
+        sign,
     )
 except ImportError:
     from .curves_backends.ecdsa_backend import (
         generate_private_key,
         recover_public_key_from_signature,
+        get_compressed_public_key,
         get_uncompressed_public_key,
         get_public_key,
+        sign,
     )
 
 
